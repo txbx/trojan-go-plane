@@ -1,0 +1,8 @@
+{
+  "properties": [
+    {
+      "name": "trojanserver.host",
+      "type": "java.lang.String",
+      "description": "Description for trojanserver.host."
+  }
+] }
