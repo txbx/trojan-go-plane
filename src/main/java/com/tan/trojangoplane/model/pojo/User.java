@@ -31,4 +31,10 @@ public class User implements Serializable {
     private Long limitdownload;
     @ApiModelProperty(name = "limitip", value = "限制用户同时在线ip数量", dataType = "Integer")
     private Integer limitip;
+
+    //补充字段
+    @ApiModelProperty(name = "currentupload", value = "用户当前上传速度（单位，1字节/s）", dataType = "Long")
+    private Long currentupload;
+    @ApiModelProperty(name = "currentdownload", value = "用户当前下载度（（单位，1字节/s）", dataType = "Long")
+    private Long currentdownload;
 }

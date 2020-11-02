@@ -1,7 +1,10 @@
 server:
   port: 8081
 
-spring:
-  profiles:
-    include: trojangoserver
+#spring:
+#  profiles:
+#    include: trojangoserver
 
+trojanserver:
+  targetip: "34.97.228.51"
+  targetport: 2333
