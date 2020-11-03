@@ -1,20 +1,21 @@
 package com.tan.trojangoplane.trojango;
 
+import com.tan.trojangoplane.model.pojo.Result;
 import com.tan.trojangoplane.model.pojo.User;
+import com.tan.trojangoplane.trojango.callback.CallBack;
 import io.grpc.netty.shaded.io.grpc.netty.NegotiationType;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import trojan.api.Api;
-import trojan.api.TrojanClientServiceGrpc;
 import trojan.api.TrojanServerServiceGrpc;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 
 /**
  * @author : tan
@@ -40,66 +41,36 @@ public class trojanUser {
                 TrojanServerServiceGrpc.newBlockingStub(channel).listUsers(req);
         List<User> userList = new ArrayList<>();
         while (listUsersResponseIterator.hasNext()){
-            String s = listUsersResponseIterator.next().toString();
-            //去掉字符串中的换行空格
-            Pattern p = Pattern.compile("\\s*|\t|\r|\n");
-            Matcher m = p.matcher(s);
-            s = m.replaceAll("");
 
             User user = new User();
 
-            //切割字符串获取字段值，set到user
-            //hash:
-            String hash = s.substring(s.indexOf("hash:")+6,s.indexOf("\"}traffic"));
+            Api.ListUsersResponse userNext = listUsersResponseIterator.next();
+            Api.UserStatus userStatus = userNext.getStatus();
+
+            String hash = userStatus.getUser().getHash();
             user.setPwhash(hash);
 
-            //sumupload
-            if(s.contains("upload_traffic")){
-                String sumupload = s.substring(s.indexOf("upload_traffic:")+15,s.indexOf("download"));
-                user.setSumupload(Long.parseLong(sumupload));
-            }
-            //sumdownload:
-            if(s.contains("download_traffic")){
-                String sumdownload = s.substring(s.indexOf("download_traffic:")+17,s.indexOf("}speed"));
-                user.setSumdownload(Long.parseLong(sumdownload));
-            }
+            long downloadTraffic = userStatus.getTrafficTotal().getDownloadTraffic();
+            long uploadTraffic = userStatus.getTrafficTotal().getUploadTraffic();
+            user.setSumdownload(downloadTraffic);
+            user.setSumupload(uploadTraffic);
 
-            if(s.contains("speed_current{upload")||s.contains("speed_current{download")){
-                //截取当前速度字段
-                String current = s.substring(s.indexOf("speed_current{"),s.indexOf("speed_limit"));
-                //currentupload:
-                if(current.contains("upload")){
-                    String currentupload = s.substring(s.indexOf("upload_speed:")+13,s.indexOf("download_speed"));
-                    user.setCurrentupload(Long.parseLong(currentupload));
-                }
-                //currentdownload
-                if(current.contains("download")){
-                    String currentdownload = s.substring(s.indexOf("download_speed:")+15,s.indexOf("}"));
-                    user.setCurrentdownload(Long.parseLong(currentdownload));
-                }
+            long downloadSpeed = userStatus.getSpeedCurrent().getDownloadSpeed();
+            long uploadSpeed = userStatus.getSpeedCurrent().getUploadSpeed();
+            user.setCurrentdownload(downloadSpeed);
+            user.setCurrentupload(uploadSpeed);
 
-            }
+            long limitdownloadSpeed = userStatus.getSpeedLimit().getDownloadSpeed();
+            long limituploadSpeed = userStatus.getSpeedLimit().getUploadSpeed();
+            user.setLimitdownload(limitdownloadSpeed);
+            user.setLimitupload(limituploadSpeed);
 
+            int currentip = userStatus.getIpCurrent();
+            int ipLimit = userStatus.getIpLimit();
+            user.setCurrentip(currentip);
+            user.setLimitip(ipLimit);
 
-            //limit
-            if(s.contains("speed_limit{upload")||s.contains("speed_limit{download")){
-                String limit = s.substring(s.indexOf("speed_limit{upload_speed:"),s.indexOf("ip_limit"));
-                //limitupload
-                if(limit.contains("upload")){
-                    String limitupload = limit.substring(limit.lastIndexOf("upload")+13,limit.lastIndexOf("download_speed"));
-                    user.setLimitupload(Long.parseLong(limitupload));
-                }
-                //limitdownload
-                if(limit.contains("download_speed")){
-                    String limitdownload = limit.substring(limit.lastIndexOf("download")+15,limit.lastIndexOf("}"));
-                    user.setLimitdownload(Long.parseLong(limitdownload));
-                }
-            }
-
-            if(s.contains("ip_limit")){
-                String limitip = s.substring(s.indexOf("ip_limit")+9,s.lastIndexOf("}"));
-                user.setLimitip(Integer.parseInt(limitip));
-            }
+            System.out.println("user对象："+user);
             userList.add(user);
         }
         System.out.println("用户对象列表集合："+userList);
@@ -107,37 +78,188 @@ public class trojanUser {
         return userList;
     }
 
-    //添加一个用户
-    public void add(User user){
+    //根据密码获取指定用户对象
+    public Result findbypw(CallBack callBack,String pw){
+        //构建两个流，GetUsersRequest和GetUsersResponse
+        //GetUsersResponse用于和服务器建立连接通道
+        //先构建请求流
+        Api.User protouser = Api.User.newBuilder().setPassword(pw).build();
+        Api.GetUsersRequest getUsersRequest = Api.GetUsersRequest.newBuilder().setUser(protouser).build();
+
+        //判断调用状态。在内部类中被访问，需要加final修饰
+        final CountDownLatch countDownLatch = new CountDownLatch(1);
+
+        //构建响应流和服务端建立通道
+        StreamObserver<Api.GetUsersResponse> responseStreamObserver =
+                new StreamObserver<Api.GetUsersResponse>() {
+                    @Override
+                    public void onNext(Api.GetUsersResponse getUsersResponse) {
+                        callBack.setGetUsersResponse(getUsersResponse);
+                        countDownLatch.countDown();
+                        //callBack.setResult();
+                    }
+
+                    @Override
+                    public void onError(Throwable throwable) {
+                        System.out.println("数据发送错误："+throwable.getMessage());
+                        countDownLatch.countDown();
+                    }
+
+                    @Override
+                    public void onCompleted() {
+                        System.out.println("传输完成");
+                        countDownLatch.countDown();
+                    }
+                };
+
+        //打开通道进行数据传输
+        StreamObserver<Api.GetUsersRequest> requestStreamObserver = TrojanServerServiceGrpc.newStub(channel).getUsers(responseStreamObserver);
+        requestStreamObserver.onNext(getUsersRequest);
+
+        try {
+            //如果在规定时间内没有请求完，则让程序停止
+            if(!countDownLatch.await(3, TimeUnit.SECONDS)){
+                //1秒内没有返回结果，返回超时
+                return new Result(false,"超时！");
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        Api.GetUsersResponse getUsersResponse = callBack.getGetUsersResponse();
+        String info = getUsersResponse.getInfo();
+        boolean success = getUsersResponse.getSuccess();
+        Api.UserStatus status = getUsersResponse.getStatus();
+        //实例化用户
+        User user = new User();
+
+        String hash = status.getUser().getHash();
+        user.setPwhash(hash);
+
+        long downloadTraffic = status.getTrafficTotal().getDownloadTraffic();
+        long uploadTraffic = status.getTrafficTotal().getUploadTraffic();
+        user.setSumdownload(downloadTraffic);
+        user.setSumupload(uploadTraffic);
+
+        long downloadSpeed = status.getSpeedCurrent().getDownloadSpeed();
+        long uploadSpeed = status.getSpeedCurrent().getUploadSpeed();
+        user.setCurrentdownload(downloadSpeed);
+        user.setCurrentupload(uploadSpeed);
+
+        long limitdownloadSpeed = status.getSpeedLimit().getDownloadSpeed();
+        long limituploadSpeed = status.getSpeedLimit().getUploadSpeed();
+        user.setLimitdownload(limitdownloadSpeed);
+        user.setLimitupload(limituploadSpeed);
+
+        int currentip = status.getIpCurrent();
+        int ipLimit = status.getIpLimit();
+        user.setCurrentip(currentip);
+        user.setLimitip(ipLimit);
+
+        if(success){
+            return new com.tan.trojangoplane.model.pojo.Result(true,"操作成功完成！",user);
+        }else {
+            return new com.tan.trojangoplane.model.pojo.Result(false,"操作出错！"+info);
+        }
+    }
+
+    //操作用户
+    //增：添加一个用户（密码，限制上传下载速度，限制同时在线ip）
+    //修改用户信息（不能改密码，用户连接信息不用改密码）
+    //删：根据密码hash删除用户
+    public Result operationTrojanUser(CallBack callBack,User user,Integer operation){
         //需要构建两个流，SetUsersRequest流和SetUsersResponse流
-        Api.User protouser = Api.User.newBuilder().setPassword(user.getPassword()).build();
-        Api.UserStatus userStatus = Api.UserStatus.newBuilder().setUser(protouser).build();
+        Api.User protouser = Api.User.newBuilder().setHash(user.getPwhash()).build();
+
+        Api.Speed limitspeed = Api.Speed.newBuilder()
+                .setDownloadSpeed(user.getLimitdownload())
+                .setUploadSpeed(user.getLimitupload()).build();
+
+        Api.UserStatus userStatus = Api.UserStatus.newBuilder()
+                .setUser(protouser)
+                .setIpLimit(user.getLimitip())
+                .setSpeedLimit(limitspeed)
+                .build();
+
+        Api.SetUsersRequest.Operation trojanoperation = null;
+
+        if(operation == 0){
+            trojanoperation = Api.SetUsersRequest.Operation.Add;
+        }else if(operation == 1){
+            trojanoperation = Api.SetUsersRequest.Operation.Delete;
+        }else if(operation == 2){
+            trojanoperation = Api.SetUsersRequest.Operation.Modify;
+        }else {
+            return new Result(false,"操作参数出错");
+        }
+
         Api.SetUsersRequest setUsersRequest = Api.SetUsersRequest.newBuilder()
-                .setOperation(Api.SetUsersRequest.Operation.Add).setStatus(userStatus).build();
+                .setOperation(trojanoperation).setStatus(userStatus).build();
+
+        //判断调用状态。在内部类中被访问，需要加final修饰
+        final CountDownLatch countDownLatch = new CountDownLatch(1);
 
         StreamObserver<Api.SetUsersResponse> responseStreamObserver =
                 new StreamObserver<Api.SetUsersResponse>() {
-            @Override
-            public void onNext(Api.SetUsersResponse setUsersResponse) {
-                System.out.println("数据发送");
-            }
+                    @Override
+                    public void onNext(Api.SetUsersResponse setUsersResponse) {
+                        callBack.setSetUsersResponse(setUsersResponse);
+                        //callBack.callBackInstance();
+                        //将countDownLatch置0
+                        countDownLatch.countDown();
+                    }
 
-            @Override
-            public void onError(Throwable throwable) {
-                System.out.println("数据出错");
-            }
+                    @Override
+                    public void onError(Throwable throwable) {
+                        System.out.println("数据出错");
+                        countDownLatch.countDown();
+                    }
 
-            @Override
-            public void onCompleted() {
-                System.out.println("传输完成");
-            }
-        };
+                    @Override
+                    public void onCompleted() {
+                        countDownLatch.countDown();
+                    }
+                };
 
         StreamObserver<Api.SetUsersRequest> requestStreamObserver =
                 TrojanServerServiceGrpc.newStub(channel).setUsers(responseStreamObserver);
 
         requestStreamObserver.onNext(setUsersRequest);
+
+        try {
+            //如果在规定时间内没有请求完，则让程序停止
+            if(!countDownLatch.await(3, TimeUnit.SECONDS)){
+                //1秒内没有返回结果，返回超时
+                return new Result(false,"超时！");
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        //判断调用结束状态
+        //不用判断能执行到这里countDownLatch必为0,也就是有了异步的返回结果
+        //if(countDownLatch.getCount() == 0)
+        //responseStreamObserver.onCompleted();
+        Api.SetUsersResponse result = callBack.getSetUsersResponse();
+        String info = result.getInfo();
+        boolean success = result.getSuccess();
+        if(success){
+            return new com.tan.trojangoplane.model.pojo.Result(true,"操作成功完成！");
+        }else {
+            return new com.tan.trojangoplane.model.pojo.Result(false,"操作出错！"+info);
+        }
+
     }
+
+    //单个服务器状况
+    public void serverstatus(){
+        //总上传流量，总下载流量，总在线ip(接口，暂时不加在线速度)，
+        //实时上传速度，实时下载速度，
+        //cpu,内存，硬盘，负载
+        //总用户数
+    }
+
+    //添加用户的时候传不同ip+端口修改不同服务器中的数据
 
 
 }
