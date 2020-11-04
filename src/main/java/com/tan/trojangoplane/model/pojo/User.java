@@ -17,6 +17,8 @@ public class User implements Serializable {
 
     @ApiModelProperty(name = "id", value = "主键", dataType = "Integer",hidden = true)
     private Integer id;
+    @ApiModelProperty(name = "loginpassword", value = "用户名/登录账号", dataType = "String")
+    private String loginpassword;
     @ApiModelProperty(name = "pwhash", value = "用户密码加密后hash值", dataType = "String")
     private String pwhash;
     @ApiModelProperty(name = "password", value = "用户密码明文", dataType = "String")

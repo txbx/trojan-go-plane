@@ -68,7 +68,7 @@ public class UserController {
     @PostMapping("/deleteUserByhash")
     @ApiOperation(value = "删除用户",notes = "删除用户")
     @ApiImplicitParams({
-            @ApiImplicitParam(paramType="query", name="pw", dataType="String", required=true, value="1")
+            @ApiImplicitParam(paramType="query", name="pw", dataType="String", required=true, value="用户密码")
     })
     public Result deleteUserByhash(String pw){
         User user = new User();

@@ -1,6 +1,5 @@
 package com.tan.trojangoplane.trojango.callback;
 
-import com.tan.trojangoplane.model.pojo.Result;
 import trojan.api.Api;
 
 /**

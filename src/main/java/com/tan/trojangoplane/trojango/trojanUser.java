@@ -70,11 +70,8 @@ public class trojanUser {
             user.setCurrentip(currentip);
             user.setLimitip(ipLimit);
 
-            System.out.println("user对象："+user);
             userList.add(user);
         }
-        System.out.println("用户对象列表集合："+userList);
-
         return userList;
     }
 
@@ -168,18 +165,54 @@ public class trojanUser {
     //修改用户信息（不能改密码，用户连接信息不用改密码）
     //删：根据密码hash删除用户
     public Result operationTrojanUser(CallBack callBack,User user,Integer operation){
+        Api.Speed limitspeed = null;
+        Api.UserStatus userStatus = null;
+
         //需要构建两个流，SetUsersRequest流和SetUsersResponse流
-        Api.User protouser = Api.User.newBuilder().setHash(user.getPwhash()).build();
 
-        Api.Speed limitspeed = Api.Speed.newBuilder()
-                .setDownloadSpeed(user.getLimitdownload())
-                .setUploadSpeed(user.getLimitupload()).build();
+        if(user.getLimitdownload() != null && user.getLimitupload() != null){
+            limitspeed = Api.Speed.newBuilder()
+                    .setDownloadSpeed(user.getLimitdownload())
+                    .setUploadSpeed(user.getLimitupload())
+                    .build();
+        }else if(user.getLimitdownload() != null && user.getLimitupload() == null){
+            limitspeed = Api.Speed.newBuilder()
+                    .setDownloadSpeed(user.getLimitdownload())
+                    .build();
+        }else if(user.getLimitdownload() == null && user.getLimitupload() != null){
+            limitspeed = Api.Speed.newBuilder()
+                    .setUploadSpeed(user.getLimitupload())
+                    .build();
+        }else if(user.getLimitdownload() == null && user.getLimitupload() == null){
+            limitspeed = Api.Speed.newBuilder()
+                    .setDownloadSpeed(0)
+                    .setUploadSpeed(0)
+                    .build();
+        }
 
-        Api.UserStatus userStatus = Api.UserStatus.newBuilder()
-                .setUser(protouser)
-                .setIpLimit(user.getLimitip())
-                .setSpeedLimit(limitspeed)
-                .build();
+
+        if(user.getLimitip() != null && limitspeed != null){
+            userStatus = Api.UserStatus.newBuilder()
+                    .setUser(Api.User.newBuilder().setPassword(user.getPassword()).build())
+                    .setIpLimit(user.getLimitip())
+                    .setSpeedLimit(limitspeed)
+                    .build();
+        }else if(user.getLimitip() == null && limitspeed != null){
+            userStatus = Api.UserStatus.newBuilder()
+                    .setUser(Api.User.newBuilder().setPassword(user.getPassword()).build())
+                    .setSpeedLimit(limitspeed)
+                    .build();
+        }else if(user.getLimitip() != null && limitspeed == null){
+            userStatus = Api.UserStatus.newBuilder()
+                    .setUser(Api.User.newBuilder().setPassword(user.getPassword()).build())
+                    .setIpLimit(user.getLimitip())
+                    .build();
+        }else if(user.getLimitip() == null && limitspeed == null){
+            userStatus = Api.UserStatus.newBuilder()
+                    .setUser(Api.User.newBuilder().setPassword(user.getPassword()).build())
+                    .build();
+        }
+
 
         Api.SetUsersRequest.Operation trojanoperation = null;
 
@@ -229,7 +262,7 @@ public class trojanUser {
         try {
             //如果在规定时间内没有请求完，则让程序停止
             if(!countDownLatch.await(3, TimeUnit.SECONDS)){
-                //1秒内没有返回结果，返回超时
+                //3秒内没有返回结果，返回超时
                 return new Result(false,"超时！");
             }
         } catch (InterruptedException e) {
@@ -241,11 +274,11 @@ public class trojanUser {
         //if(countDownLatch.getCount() == 0)
         //responseStreamObserver.onCompleted();
         Api.SetUsersResponse result = callBack.getSetUsersResponse();
-        String info = result.getInfo();
         boolean success = result.getSuccess();
         if(success){
             return new com.tan.trojangoplane.model.pojo.Result(true,"操作成功完成！");
         }else {
+            String info = result.getInfo();
             return new com.tan.trojangoplane.model.pojo.Result(false,"操作出错！"+info);
         }
 
