@@ -8,3 +8,13 @@ server:
 trojanserver:
   targetip: "34.97.228.51"
   targetport: 2333
+
+spring:
+  datasource:
+    # 配置数据源
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 使用druid连接池
+    type: com.alibaba.druid.pool.DruidDataSource
+    url: jdbc:mysql://cdb-b2gaam94.cd.tencentcdb.com:10057/trojango?useUnicode=true&characterEncoding=utf8&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC
+    username: root
+    password: hxh222222

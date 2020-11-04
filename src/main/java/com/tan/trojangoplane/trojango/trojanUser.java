@@ -169,7 +169,6 @@ public class trojanUser {
         Api.UserStatus userStatus = null;
 
         //需要构建两个流，SetUsersRequest流和SetUsersResponse流
-
         if(user.getLimitdownload() != null && user.getLimitupload() != null){
             limitspeed = Api.Speed.newBuilder()
                     .setDownloadSpeed(user.getLimitdownload())
